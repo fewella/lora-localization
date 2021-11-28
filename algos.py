@@ -1,5 +1,11 @@
 import numpy as np
 
+### Mathematical models taken from:
+### J. Desai and U. Tureli, "Evaluating Performance of Various Localization Algorithms in Wireless and Sensor Networks,"
+### 2007 IEEE 18th International Symposium on Personal, Indoor and Mobile Radio Communications, 2007, pp. 1-5
+###
+
+
 def maximum_likelihood(gateways):
     ''' 
     gateways: [(x1, y1, r1), (x2, y2, r2), ...]
@@ -17,12 +23,12 @@ def maximum_likelihood(gateways):
         y_i = gateway[1]
         r_i = gateway[2]
         
-        A[i] = [x_n - x_i, y_n - y_i]
-        b[i] = [-(x_i**2) - (y_i**2) + (r_i)**2 + (x_n)**2 + (y_n)**2 - (r_n)**2]
+        A[i] = [2 * (x_n - x_i), 2 * (y_n - y_i)]
+        b[i] = [-(x_i**2) - (y_i**2) + (r_i**2) + (x_n**2) + (y_n**2) - (r_n**2)]
 
-    print(A)
-    print(b)
-    return np.linalg.lstsq(A, b)[0]
+    res = np.linalg.lstsq(A, b, rcond=None)
+    return (res[0][0][0], res[0][1][0])
+
 
 def min_max(gateways):
     '''
@@ -34,17 +40,33 @@ def min_max(gateways):
     t = np.inf
     b = -np.inf
     for gateway in gateways:
-        lg = gateway[0] + gateway[2] / 2
-        rg = gateway[0] - gateway[2] / 2
-        tg = gateway[1] - gateway[2] / 2
-        bg = gateway[1] + gateway[2] / 2
-
+        rad = gateway[2] 
+        lg  = gateway[0] - rad
+        rg  = gateway[0] + rad
+        tg  = gateway[1] + rad
+        bg  = gateway[1] - rad
+        
         l = max(l, lg)
-        r = min(l, rg)
-        t = min(l, tg)
-        b = max(l, bg)
-
+        r = min(r, rg)
+        t = min(t, tg)
+        b = max(b, bg)
+    
     return ( (l+r)/2, (t+b)/2 )
 
-print(maximum_likelihood([[2, 0, 2], [4, 4, 2], [10, 0, 5]]))
-print(min_max([[2, 0, 2], [4, 4, 2], [10, 0, 5]]))
+
+def test():
+    gateways = [
+        [
+            (2.0, 3.0, 2.5),
+            (1.0, 1.0, 1.0),
+            (2.5, 1.0, 1.0)
+        ]
+    ]
+
+    for gateway_coords in gateways:
+        print(maximum_likelihood(gateway_coords))
+        print(min_max(gateway_coords))
+
+
+if __name__ == "__main__":
+    test()
