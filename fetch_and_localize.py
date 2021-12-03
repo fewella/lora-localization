@@ -12,6 +12,9 @@ delta_read_time   = 5
 rssi_store        = {} # rssi_store[gateway_id (str)] -> [rssi readings (arr of nums)]
 rssi_store_mutex  = threading.Lock()
 
+localizations_min_max    = []
+localizations_likelihood = []
+
 
 def follow(filename):
     f = open(filename, "r")
@@ -59,11 +62,24 @@ def listen(gateway_id, output_filename):
             json_payload += line
 
 
+# -30rssi @ 1m
+n = 2
+A = -30
+def rssi_to_distance(rssi):
+    return 10 ** ((A - rssi) / 10 * n)
+
+
 if __name__ == "__main__":
     gateway_ids = [
         "afewell-gateway",
         "colin-gateway",
         "jimmys-gateway"
+    ]
+
+    gateway_centers = [
+        [10, 10],
+        [20, 20],
+        [30, 30]
     ]
 
     traffic_filenames = [
@@ -85,6 +101,21 @@ if __name__ == "__main__":
         t = threading.Thread(target=listen, args=(gateway_ids[i], traffic_filenames[i], ))
         t.start()
         threads.append(t)
+    
+    while True:
+        time.sleep(3)
+
+        rssi_store_mutex.acquire()
+        gateways = []
+        for i in range(3):
+            coords = gateway_centers[i]
+            coords.append(rssi_to_distance(rssi_store[gateway_ids[i]]))
+            localizations_min_max.append(algos.min_max(gateways))
+            localizations_likelihood.append(algos.maximum_likelihood(gateways))
+        rssi_store_mutex.release()
+        
+        print(localizations_min_max)
+        print(localizations_likelihood)
     
     for t in threads:
         t.join()

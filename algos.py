@@ -36,8 +36,8 @@ def min_max(gateways):
     returns: (x, y)
     '''
     l = -np.inf
-    r = np.inf
-    t = np.inf
+    r =  np.inf
+    t =  np.inf
     b = -np.inf
     for gateway in gateways:
         rad = gateway[2] 
