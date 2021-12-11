@@ -2,6 +2,7 @@ import time
 import json
 import threading
 import subprocess
+import traceback
 
 import algos
 
@@ -37,7 +38,6 @@ def extract_rssi(json_payload):
         data = json.loads(json_payload)
         rssi = data["data"]["rx_metadata"][0]["rssi"]
     except:
-        print("failed read")
         rssi = None
     return rssi
 
@@ -48,12 +48,10 @@ def listen(gateway_id, output_filename):
     for line in follow(output_filename):
         if line == NO_DATA_READ or line == JSON_END_OBJECT:
             if json_payload:
-                print(json_payload)
                 rssi = extract_rssi(json_payload)
             if rssi:
                 rssi_store_mutex.acquire()
                 rssi_store[gateway_id].append(rssi)
-                print(rssi_store)
                 rssi_store_mutex.release()
             json_payload = ""
             if line == NO_DATA_READ:
@@ -63,10 +61,11 @@ def listen(gateway_id, output_filename):
 
 
 # -30rssi @ 1m
-n = 2
-A = -30
-def rssi_to_distance(rssi):
-    return 10 ** ((A - rssi) / 10 * n)
+n = [1.96, 2.829, 2.79]
+A = [-29, -25, -20]
+def rssi_to_distance(rssi, i):
+    dist = 10 ** ((A[i] - rssi) / (10 * n[i]))
+    return dist
 
 
 if __name__ == "__main__":
@@ -77,16 +76,16 @@ if __name__ == "__main__":
     ]
 
     gateway_centers = [
-        [10, 10],
-        [20, 20],
-        [30, 30]
+        [94, 0],
+        [64, 50],
+        [0, 0]
     ]
 
     traffic_filenames = [
         "output-1",
         "output-2",
         "output-3"
-    ]
+    ] # 56, 17
 
     cmd_login  = "ttn-lw-cli login"
     login_proc = subprocess.Popen(cmd_login, shell=True, stdout=subprocess.PIPE)
@@ -94,6 +93,8 @@ if __name__ == "__main__":
     
     threads = []
     for i in range(3):
+        rssi_store[gateway_ids[i]] = []
+
         cmd_gateway_traffic = f"ttn-lw-cli events --gateway-id {gateway_ids[i]} > {traffic_filenames[i]}"
         proc = subprocess.Popen([cmd_gateway_traffic], shell=True, stdin=None, stdout=None, stderr=None)
         time.sleep(1)
@@ -104,18 +105,28 @@ if __name__ == "__main__":
     
     while True:
         time.sleep(3)
-
         rssi_store_mutex.acquire()
         gateways = []
-        for i in range(3):
-            coords = gateway_centers[i]
-            coords.append(rssi_to_distance(rssi_store[gateway_ids[i]]))
-            localizations_min_max.append(algos.min_max(gateways))
-            localizations_likelihood.append(algos.maximum_likelihood(gateways))
+        try:
+            for i in range(3):
+                rssi = rssi_store[gateway_ids[i]][-1]
+                print("Received RSSI of " + str(rssi) + " from " + gateway_ids[i])
+                r = rssi_to_distance(rssi, i)
+                gateways.append(
+                    [gateway_centers[i][0], gateway_centers[i][1], r]
+                )
+        except:
+            print("No data read yet")
+            rssi_store_mutex.release()
+            continue
+        
+        localizations_min_max.append(algos.min_max(gateways))
+        localizations_likelihood.append(algos.maximum_likelihood(gateways))
         rssi_store_mutex.release()
         
-        print(localizations_min_max)
-        print(localizations_likelihood)
+        
+        print("Min-Max localizations:", localizations_min_max)
+        print("Maximum likelihood localizations:", localizations_likelihood)
     
     for t in threads:
         t.join()
